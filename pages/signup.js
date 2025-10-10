@@ -1,11 +1,15 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Shield } from 'lucide-react'
+import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Shield, AlertCircle } from 'lucide-react'
+import { signUp } from '../lib/supabase'
 
 export default function SignUp() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -13,23 +17,49 @@ export default function SignUp() {
     role: 'user'
   })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // Authentication logic will go here
-    console.log('SignUp:', formData)
-    router.push('/dashboard')
+    setLoading(true)
+    setError('')
+
+    // Validation
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters')
+      setLoading(false)
+      return
+    }
+
+    // Sign up with Supabase
+    const { data, error: signUpError } = await signUp(
+      formData.email,
+      formData.password,
+      {
+        full_name: formData.name,
+        role: formData.role
+      }
+    )
+
+    setLoading(false)
+
+    if (signUpError) {
+      setError(signUpError.message)
+      return
+    }
+
+    setSuccess(true)
+    setTimeout(() => {
+      router.push('/dashboard')
+    }, 2000)
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-100 via-green-100 to-yellow-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full">
-        {/* Back Button */}
         <Link href="/" className="inline-flex items-center text-purple-600 hover:text-purple-800 mb-8 font-medium transition-colors">
           <ArrowLeft className="w-5 h-5 mr-2" />
           Back to Home
         </Link>
 
-        {/* SignUp Card */}
         <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-12">
           <div className="text-center mb-8">
             <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -40,6 +70,26 @@ export default function SignUp() {
             </h2>
             <p className="text-gray-600">Create your free account and start building tests</p>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-red-500 mr-3" />
+                <p className="text-red-700">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Success Message */}
+          {success && (
+            <div className="mb-6 bg-green-50 border-l-4 border-green-500 p-4 rounded-r-xl">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-green-500 mr-3" />
+                <p className="text-green-700">Account created! Redirecting...</p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Name Input */}
@@ -56,6 +106,7 @@ export default function SignUp() {
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
                   className="w-full pl-12 pr-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-lg"
                   placeholder="John Doe"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -74,6 +125,7 @@ export default function SignUp() {
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
                   className="w-full pl-12 pr-4 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-lg"
                   placeholder="you@example.com"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -92,6 +144,7 @@ export default function SignUp() {
                   onChange={(e) => setFormData({...formData, password: e.target.value})}
                   className="w-full pl-12 pr-12 py-4 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all text-lg"
                   placeholder="••••••••"
+                  disabled={loading}
                 />
                 <button
                   type="button"
@@ -101,6 +154,7 @@ export default function SignUp() {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              <p className="text-sm text-gray-500 mt-1">Must be at least 6 characters</p>
             </div>
 
             {/* Role Selection */}
@@ -112,6 +166,7 @@ export default function SignUp() {
                 <button
                   type="button"
                   onClick={() => setFormData({...formData, role: 'user'})}
+                  disabled={loading}
                   className={`p-4 rounded-xl border-2 transition-all ${
                     formData.role === 'user'
                       ? 'border-blue-500 bg-blue-50'
@@ -125,6 +180,7 @@ export default function SignUp() {
                 <button
                   type="button"
                   onClick={() => setFormData({...formData, role: 'admin'})}
+                  disabled={loading}
                   className={`p-4 rounded-xl border-2 transition-all ${
                     formData.role === 'admin'
                       ? 'border-green-500 bg-green-50'
@@ -140,9 +196,12 @@ export default function SignUp() {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-green-500 text-white py-4 rounded-xl font-bold text-lg hover:shadow-xl transform hover:scale-105 transition-all"
+              disabled={loading}
+              className={`w-full bg-gradient-to-r from-blue-500 to-green-500 text-white py-4 rounded-xl font-bold text-lg hover:shadow-xl transform hover:scale-105 transition-all ${
+                loading ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
-              Create My Account
+              {loading ? 'Creating Account...' : 'Create My Account'}
             </button>
           </form>
 
@@ -159,4 +218,4 @@ export default function SignUp() {
       </div>
     </div>
   )
-                    }
+      }
