@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { ArrowLeft, Plus, Clock, Image as ImageIcon, Users, Share2, Trash2, Check, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Plus, Clock, Image as ImageIcon, Users, Share2, Trash2, Check, AlertCircle, Camera, DollarSign, Calendar, Lock, Mail } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { createTest } from '../lib/supabase'
 
@@ -26,8 +26,18 @@ export default function CreateTest() {
         explanation: ''
       }
     ],
-    collaborators: []
+    // Optional Features
+    proctoring_enabled: false,
+    scheduled_start: '',
+    scheduled_end: '',
+    is_private: false,
+    invited_emails: [],
+    is_paid: false,
+    price_usdc: 0,
+    creator_wallet: ''
   })
+
+  const [inviteEmail, setInviteEmail] = useState('')
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -83,6 +93,29 @@ export default function CreateTest() {
     })
   }
 
+  const addInvitedEmail = () => {
+    if (inviteEmail && inviteEmail.includes('@')) {
+      if (!testData.invited_emails.includes(inviteEmail)) {
+        setTestData({
+          ...testData,
+          invited_emails: [...testData.invited_emails, inviteEmail]
+        })
+        setInviteEmail('')
+      } else {
+        alert('Email already added!')
+      }
+    } else {
+      alert('Please enter a valid email address')
+    }
+  }
+
+  const removeInvitedEmail = (email) => {
+    setTestData({
+      ...testData,
+      invited_emails: testData.invited_emails.filter(e => e !== email)
+    })
+  }
+
   const validateTest = () => {
     if (!testData.title.trim()) {
       setError('Please enter a test title')
@@ -91,6 +124,34 @@ export default function CreateTest() {
 
     if (testData.questions.length === 0) {
       setError('Please add at least one question')
+      return false
+    }
+
+    // Validate scheduled dates
+    if (testData.scheduled_start && testData.scheduled_end) {
+      const start = new Date(testData.scheduled_start)
+      const end = new Date(testData.scheduled_end)
+      if (end <= start) {
+        setError('End date must be after start date')
+        return false
+      }
+    }
+
+    // Validate payment settings
+    if (testData.is_paid) {
+      if (!testData.price_usdc || testData.price_usdc <= 0) {
+        setError('Please set a valid price for paid test')
+        return false
+      }
+      if (!testData.creator_wallet || !testData.creator_wallet.trim()) {
+        setError('Please enter your USDC wallet address to receive payments')
+        return false
+      }
+    }
+
+    // Validate private test
+    if (testData.is_private && testData.invited_emails.length === 0) {
+      setError('Please invite at least one person for private test')
       return false
     }
 
@@ -120,24 +181,10 @@ export default function CreateTest() {
       return
     }
 
-    // Check subscription limits for free users
-    if (subscription?.plan === 'free') {
-      // In a real app, you'd check the count from the database
-      // For now, we'll allow it but show a message
-      console.log('Free user creating test')
-    }
-
     setLoading(true)
 
     try {
-      const { data, error: createError } = await createTest({
-        title: testData.title,
-        description: testData.description,
-        time_limit: testData.timeLimit,
-        questions: testData.questions,
-        collaborators: testData.collaborators,
-        is_public: true
-      })
+      const { data, error: createError } = await createTest(testData)
 
       if (createError) {
         if (createError.message.includes('duplicate key')) {
@@ -264,25 +311,200 @@ export default function CreateTest() {
                 disabled={loading}
               />
             </div>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-4">
-              <button
-                type="button"
-                disabled={loading}
-                className="flex-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
-              >
-                <Users className="w-5 h-5" />
-                Invite Collaborators
-              </button>
-              <button
-                type="button"
-                disabled={loading}
-                className="flex-1 bg-gradient-to-r from-green-500 to-blue-500 text-white py-4 rounded-xl font-semibold hover:shadow-lg transition-all flex items-center justify-center gap-2"
-              >
-                <Share2 className="w-5 h-5" />
-                Share Test
-              </button>
+          {/* OPTIONAL FEATURES CARD */}
+          <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-3xl shadow-xl p-8 border-2 border-blue-200">
+            <h2 className="text-3xl font-bold text-gray-800 mb-2">Optional Features</h2>
+            <p className="text-gray-600 mb-6">Choose which features to enable for this test</p>
+
+            {/* AI Proctoring Toggle */}
+            <div className="bg-white rounded-2xl p-6 mb-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Camera className="w-8 h-8 text-purple-500" />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-800">AI Proctoring</h3>
+                    <p className="text-gray-600 text-sm">Monitor students with camera, mic, and behavior tracking</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={testData.proctoring_enabled}
+                    onChange={(e) => setTestData({...testData, proctoring_enabled: e.target.checked})}
+                    className="sr-only peer"
+                    disabled={loading}
+                  />
+                  <div className="w-14 h-8 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+              {testData.proctoring_enabled && (
+                <div className="bg-purple-50 rounded-xl p-4 text-sm text-purple-700">
+                  ✓ Camera monitoring • ✓ Audio detection • ✓ Tab switching alerts • ✓ Full-screen enforcement
+                </div>
+              )}
+            </div>
+
+            {/* Schedule Test */}
+            <div className="bg-white rounded-2xl p-6 mb-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Calendar className="w-8 h-8 text-green-500" />
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800">Schedule Test</h3>
+                  <p className="text-gray-600 text-sm">Set start and end times for this test</p>
+                </div>
+              </div>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-2">Start Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={testData.scheduled_start}
+                    onChange={(e) => setTestData({...testData, scheduled_start: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 outline-none transition-all"
+                    disabled={loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-2">End Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={testData.scheduled_end}
+                    onChange={(e) => setTestData({...testData, scheduled_end: e.target.value})}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-green-500 focus:ring-4 focus:ring-green-100 outline-none transition-all"
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Private Test - Invite Only */}
+            <div className="bg-white rounded-2xl p-6 mb-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <Lock className="w-8 h-8 text-blue-500" />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-800">Private Test (Invite Only)</h3>
+                    <p className="text-gray-600 text-sm">Only invited people can take this test</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={testData.is_private}
+                    onChange={(e) => setTestData({...testData, is_private: e.target.checked})}
+                    className="sr-only peer"
+                    disabled={loading}
+                  />
+                  <div className="w-14 h-8 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              {testData.is_private && (
+                <div>
+                  <label className="block text-gray-700 font-semibold mb-2">Add Invited Emails</label>
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="email"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="email@example.com"
+                      className="flex-1 px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all"
+                      disabled={loading}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addInvitedEmail())}
+                    />
+                    <button
+                      type="button"
+                      onClick={addInvitedEmail}
+                      disabled={loading}
+                      className="px-6 py-3 bg-blue-500 text-white rounded-xl font-semibold hover:bg-blue-600 transition-all"
+                    >
+                      <Mail className="w-5 h-5" />
+                    </button>
+                  </div>
+                  {testData.invited_emails.length > 0 && (
+                    <div className="bg-blue-50 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-blue-700 mb-2">Invited ({testData.invited_emails.length}):</p>
+                      <div className="flex flex-wrap gap-2">
+                        {testData.invited_emails.map((email, index) => (
+                          <span key={index} className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-full text-sm">
+                            {email}
+                            <button
+                              type="button"
+                              onClick={() => removeInvitedEmail(email)}
+                              className="text-red-500 hover:text-red-700"
+                              disabled={loading}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Paid Test */}
+            <div className="bg-white rounded-2xl p-6">
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <DollarSign className="w-8 h-8 text-yellow-500" />
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-800">Paid Test (USDC)</h3>
+                    <p className="text-gray-600 text-sm">Charge students to take this test • Platform takes 10% fee</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={testData.is_paid}
+                    onChange={(e) => setTestData({...testData, is_paid: e.target.checked})}
+                    className="sr-only peer"
+                    disabled={loading}
+                  />
+                  <div className="w-14 h-8 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-yellow-300 rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-1 after:left-1 after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-yellow-600"></div>
+                </label>
+              </div>
+              {testData.is_paid && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-gray-700 font-semibold mb-2">Price (USDC) *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={testData.price_usdc}
+                      onChange={(e) => setTestData({...testData, price_usdc: parseFloat(e.target.value)})}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100 outline-none transition-all"
+                      placeholder="5.00"
+                      required={testData.is_paid}
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 font-semibold mb-2">Your USDC Wallet Address *</label>
+                    <input
+                      type="text"
+                      value={testData.creator_wallet}
+                      onChange={(e) => setTestData({...testData, creator_wallet: e.target.value})}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-yellow-500 focus:ring-4 focus:ring-yellow-100 outline-none transition-all font-mono text-sm"
+                      placeholder="0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb"
+                      required={testData.is_paid}
+                      disabled={loading}
+                    />
+                  </div>
+                  {testData.price_usdc > 0 && (
+                    <div className="bg-yellow-50 rounded-xl p-4 text-sm">
+                      <p className="font-semibold text-yellow-800 mb-1">Payment Breakdown:</p>
+                      <p className="text-yellow-700">• Test Price: ${testData.price_usdc} USDC</p>
+                      <p className="text-yellow-700">• Platform Fee (10%): ${(testData.price_usdc * 0.1).toFixed(2)} USDC</p>
+                      <p className="text-yellow-700 font-bold">• You Receive: ${(testData.price_usdc * 0.9).toFixed(2)} USDC</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -412,4 +634,4 @@ export default function CreateTest() {
       </div>
     </div>
   )
-        }
+                  }
