@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { ArrowLeft, Plus, Clock, Image as ImageIcon, Users, Share2, Trash2, Check, AlertCircle, Camera, DollarSign, Calendar, Lock, Mail } from 'lucide-react'
+import { ArrowLeft, Plus, Clock, Image as ImageIcon, Users, Share2, Trash2, Check, AlertCircle, Camera, DollarSign, Calendar, Lock, Mail, Crown } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { createTest } from '../lib/supabase'
+import { canCreateTest } from '../lib/subscriptionLimits'
 
 export default function CreateTest() {
   const router = useRouter()
@@ -38,12 +39,31 @@ export default function CreateTest() {
   })
 
   const [inviteEmail, setInviteEmail] = useState('')
+  const [limitCheck, setLimitCheck] = useState(null)
+  const [showLimitModal, setShowLimitModal] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
       router.push('/login')
+      return
+    }
+    if (isAuthenticated) {
+      checkLimits()
     }
   }, [isAuthenticated, authLoading])
+
+  const checkLimits = async () => {
+    const check = await canCreateTest()
+    setLimitCheck(check)
+    
+    if (!check.canCreate) {
+      if (check.upgrade) {
+        setShowLimitModal(true)
+      } else if (check.needsRenewal) {
+        setError(check.reason)
+      }
+    }
+  }
 
   const addQuestion = () => {
     setTestData({
@@ -181,6 +201,12 @@ export default function CreateTest() {
       return
     }
 
+    // Check limits again before creating
+    if (limitCheck && !limitCheck.canCreate) {
+      setShowLimitModal(true)
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -238,6 +264,26 @@ export default function CreateTest() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-8">
+        {/* Usage Stats for Free Users */}
+        {limitCheck && limitCheck.plan === 'free' && (
+          <div className="bg-yellow-50 border-2 border-yellow-300 rounded-2xl p-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-bold text-yellow-900 mb-1">Free Plan</p>
+                <p className="text-yellow-800">
+                  {limitCheck.createdThisMonth} / {limitCheck.limit} test{limitCheck.limit !== 1 ? 's' : ''} created this month
+                </p>
+              </div>
+              <Link href="/subscription">
+                <button className="bg-gradient-primary text-white px-6 py-3 rounded-xl font-bold hover:shadow-lg transition-all flex items-center gap-2">
+                  <Crown className="w-5 h-5" />
+                  Upgrade
+                </button>
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Error Message */}
         {error && (
           <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
@@ -632,6 +678,57 @@ export default function CreateTest() {
           </button>
         </form>
       </div>
+
+      {/* Limit Reached Modal */}
+      {showLimitModal && limitCheck && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-10 h-10 text-red-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-800 mb-2">Limit Reached</h3>
+              <p className="text-gray-600">
+                {limitCheck.reason}
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 mb-6 border-2 border-purple-200">
+              <div className="flex items-center gap-3 mb-4">
+                <Crown className="w-8 h-8 text-purple-600" />
+                <div>
+                  <p className="font-bold text-purple-900">Upgrade to Premium</p>
+                  <p className="text-sm text-purple-700">Create unlimited tests</p>
+                </div>
+              </div>
+              <div className="space-y-2 text-sm text-purple-800">
+                <p>✓ Unlimited test creation</p>
+                <p>✓ Unlimited test taking</p>
+                <p>✓ AI Proctoring</p>
+                <p>✓ Advanced analytics</p>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowLimitModal(false)
+                  router.push('/dashboard')
+                }}
+                className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300 transition-all"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={() => router.push('/subscription')}
+                className="flex-1 bg-gradient-primary text-white py-3 rounded-xl font-bold hover:shadow-lg transition-all"
+              >
+                Upgrade Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
-                  }
+}
